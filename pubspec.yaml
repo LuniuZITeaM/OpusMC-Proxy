@@ -1,5 +1,6 @@
 name: opus_mc_proxy
 description: "OpusMC 房间选择与 Minecraft Java 26.2 桥接客户端"
+repository: https://github.com/LuniuZITeaM/OpusMC-Proxy
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

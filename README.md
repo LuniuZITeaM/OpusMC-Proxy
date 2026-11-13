@@ -57,3 +57,11 @@ Windows 启动文件为 `build/windows/x64/runner/Release/OpusMC-Proxy.exe`，�
 OpusMC 上游协议裁剪了完整 Java 数据。物品完整 data components、所有实体 metadata、方块实体 NBT、配方书、计分板、进度、BossBar 等无法保证完整还原；这些信息也无法由 ViaVersion 补齐。这是需要真实房间验证的桥接版本，自动化测试通过不代表完整原版兼容。
 
 当前实现覆盖登录配置、区块/光照、走动、聊天/命令、挖放方块、攻击/交互、基础背包/容器及实体显示。创造飞行开关尚未发现可验证的上游消息，暂不转发；特殊物品组件的创造栏操作会被拒绝并恢复槽位。音效、药水效果、完整交易与配方等仍需补充。遇到未实现的消息会在日志中提示。
+
+## 许可证
+
+本项目原创代码以 GNU General Public License v3.0（SPDX：`GPL-3.0-only`）发布，完整条款见 [LICENSE](LICENSE)。
+
+Copyright (C) 2026 土豆味小哲 <LUJIBACLIENT@dedeteam.lujiba>。
+
+第三方依赖及其组件遵循各自的许可证。
