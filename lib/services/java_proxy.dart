@@ -269,13 +269,15 @@ class _Session {
         final base = owner.api.base;
         final uri = base.replace(
           scheme: base.scheme == 'https' ? 'wss' : 'ws',
-          path: '/ws',
+          path: '${base.path}/ws',
           query: null,
           fragment: null,
         );
         owner.log('$name 正在连接房间 ${owner._room}');
-        final connection = await WebSocket.connect(uri.toString())
-            .timeout(const Duration(seconds: 20));
+        final connection = await WebSocket.connect(
+          uri.toString(),
+          headers: OpusApi.upstreamHeaders,
+        ).timeout(const Duration(seconds: 20));
         if (closed) {
           await connection.close();
           return;

@@ -75,8 +75,15 @@ void main() {
       final received = StreamController<Map<String, dynamic>>.broadcast();
       final websocket = Completer<WebSocket>();
       final requests = server.listen((request) async {
-        if (request.uri.path != '/ws') {
+        if (request.uri.path != '/fixture/ws') {
           request.response.statusCode = 404;
+          await request.response.close();
+          return;
+        }
+        if (request.headers.value('origin') != 'https://www.bilibilitoy.com' ||
+            request.headers.value('referer') !=
+                'https://www.bilibilitoy.com/') {
+          request.response.statusCode = 403;
           await request.response.close();
           return;
         }
@@ -86,7 +93,7 @@ void main() {
           received.add(jsonDecode(event as String) as Map<String, dynamic>);
         });
       });
-      final api = OpusApi('http://127.0.0.1:${server.port}')
+      final api = OpusApi('http://127.0.0.1:${server.port}/fixture')
         ..token = 'fixture-token';
       final proxy = JavaProxy(api: api, log: (_) {});
       await proxy.start(

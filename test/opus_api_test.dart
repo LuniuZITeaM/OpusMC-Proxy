@@ -18,7 +18,17 @@ void main() {
           'method': r.method,
           'body': body,
           'key': r.uri.queryParameters['key'],
+          'origin': r.headers.value('origin'),
+          'referer': r.headers.value('referer'),
         });
+        // Production rejects missing game origins before checking credentials.
+        if (r.headers.value('origin') != 'https://www.bilibilitoy.com' ||
+            r.headers.value('referer') != 'https://www.bilibilitoy.com/') {
+          r.response.statusCode = 403;
+          r.response.write(jsonEncode({'error': '请在 B站 Toy 页面打开游戏'}));
+          await r.response.close();
+          return;
+        }
         final response = switch (r.uri.path) {
           '/api/account/code' => {
             'token': 'fixture-secret',
@@ -54,6 +64,10 @@ void main() {
         expect(requests[1]['body'], isNull);
         expect(requests[2]['key'], 'fixture-key');
         expect(requests[3]['body']['_t'], 'fixture-secret');
+        for (final request in requests) {
+          expect(request['origin'], 'https://www.bilibilitoy.com');
+          expect(request['referer'], 'https://www.bilibilitoy.com/');
+        }
       } finally {
         api.dispose();
         await subscription.cancel();
@@ -61,6 +75,37 @@ void main() {
       }
     },
   );
+  test('public room responses larger than 2 MB remain readable', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final rooms = List.generate(
+      22000,
+      (i) => {
+        'code': 'ROOM$i',
+        'name': 'Room ${'x' * 120}',
+        'owner': 'Fixture',
+        'players': 0,
+        'max': 4,
+        'state': 'running',
+      },
+    );
+    final body = jsonEncode({'rooms': rooms});
+    expect(utf8.encode(body).length, greaterThan(2 * 1024 * 1024));
+    final subscription = server.listen((r) async {
+      r.response.headers.contentType = ContentType.json;
+      r.response.write(body);
+      await r.response.close();
+    });
+    final api = OpusApi('http://127.0.0.1:${server.port}');
+    try {
+      final result = await api.publicRooms();
+      expect(result.length, rooms.length);
+      expect(result.last['code'], 'ROOM21999');
+    } finally {
+      api.dispose();
+      await subscription.cancel();
+      await server.close(force: true);
+    }
+  });
   test('401 invalidates a session and exposes the actionable error', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final subscription = server.listen((r) async {
