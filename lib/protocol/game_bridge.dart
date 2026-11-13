@@ -33,9 +33,13 @@ class GameBridge {
   List<int> _biomeIds = [];
   List<int> get biomeIds => List<int>.unmodifiable(_biomeIds);
   bool _loggedIn = false, _positioned = false;
+  bool _freshMovement = false;
   double _x = 0, _y = 0, _z = 0, _yaw = 0, _pitch = 0;
   bool _onGround = false, _horizontalCollision = false;
   int _input = 0;
+  int? _vehicleId;
+  List<dynamic>? _vehicleMove;
+  List<bool>? _paddles;
   int? _cacheX, _cacheZ;
   String _dimension = 'minecraft:overworld';
   final Set<int> _teleports = {};
@@ -153,6 +157,8 @@ class GameBridge {
         _playersMessage(m);
       case 'meta':
         _meta(m);
+      case 'equip':
+        _equipment(m);
       case 'wev':
         _send(
           'LEVEL_EVENT',
@@ -176,6 +182,7 @@ class GameBridge {
         for (final id in ids) {
           _entities.remove(id);
         }
+        if (ids.contains(_vehicleId)) _dismount();
         _send('REMOVE_ENTITIES', (w) {
           w.varInt(ids.length);
           for (final id in ids) {
@@ -184,6 +191,11 @@ class GameBridge {
         });
       case 'pass':
         final ids = (m['list'] as List? ?? []).cast<int>();
+        if (ids.contains(_playerId)) {
+          _vehicleId = _int(m, 'id');
+        } else if (_vehicleId == _int(m, 'id')) {
+          _dismount();
+        }
         _send('SET_PASSENGERS', (w) {
           w
             ..varInt(_int(m, 'id'))
@@ -270,12 +282,14 @@ class GameBridge {
 
   void _resetWorld(Map<String, dynamic> m) {
     _positioned = false;
+    _freshMovement = false;
     _input = 0;
     _teleports.clear();
     _entities.clear();
     _cacheX = _cacheZ = null;
     _x = _y = _z = _yaw = _pitch = 0;
     _onGround = _horizontalCollision = false;
+    _dismount();
     final dim = m['dimension'] ?? m['dim'] ?? 'overworld';
     _dimension = _resource(
       dim == 'nether'
@@ -359,6 +373,7 @@ class GameBridge {
   }
 
   void _position(Map<String, dynamic> m) {
+    _freshMovement = false;
     final rel = m['rel'] is Map ? m['rel'] as Map : const {};
     const keys = ['x', 'y', 'z', 'yaw', 'pitch'];
     var flags = 0;
@@ -535,8 +550,9 @@ class GameBridge {
   }
 
   void _meta(Map m) {
-    final values = m['m'];
-    if (values is! Map) return;
+    // The original handler uses flattened pose/item; the extended handler
+    // additionally sends an m map. Preserve both when they arrive together.
+    final values = {...m, if (m['m'] is Map) ...(m['m'] as Map)};
     final w = Writer()..varInt(_int(m, 'id'));
     var count = 0;
     if (values.containsKey('shared_flags')) {
@@ -586,10 +602,67 @@ class GameBridge {
         count++;
       }
     }
+    if (values.containsKey('item') &&
+        _entities[_int(m, 'id')]?.type == 'minecraft:item') {
+      // Entity has eight base metadata fields; ItemEntity's first field is 8.
+      // EntityDataSerializers.ITEM_STACK is serializer 7 in 26.2.
+      w
+        ..u8(8)
+        ..varInt(7);
+      _writeDisplayStack(w, values['item']);
+      count++;
+    }
     if (count > 0) {
       w.u8(255);
       emit('SET_ENTITY_DATA', w);
     }
+  }
+
+  // Display-only projection. InventoryBridge retains opaque stack signatures
+  // and owns click predictions; entity visuals need only item ID and count.
+  void _writeDisplayStack(Writer w, dynamic stack) {
+    if (stack == null) {
+      w.varInt(0);
+      return;
+    }
+    if (stack is! Map) throw const FormatException('Invalid entity item stack');
+    final count = _int(stack, 'c');
+    if (count <= 0) {
+      w.varInt(0);
+      return;
+    }
+    final id = _id('items', stack['n']);
+    if (id == null) throw FormatException('Unknown entity item: ${stack['n']}');
+    w
+      ..varInt(count)
+      ..varInt(id)
+      ..varInt(0)
+      ..varInt(0);
+  }
+
+  void _equipment(Map m) {
+    final slots = <int, dynamic>{};
+    if (m.containsKey('item')) slots[0] = m['item'];
+    final updates = m['slots'];
+    if (updates is Map) {
+      for (final entry in updates.entries) {
+        final slot = int.tryParse(entry.key.toString());
+        if (slot != null && slot >= 0 && slot < 8) slots[slot] = entry.value;
+      }
+    } else if (updates is List) {
+      for (var i = 0; i < updates.length && i < 8; i++) {
+        slots[i] = updates[i];
+      }
+    }
+    if (slots.isEmpty) return;
+    _send('SET_EQUIPMENT', (w) {
+      w.varInt(_int(m, 'id'));
+      var i = 0;
+      for (final entry in slots.entries) {
+        w.u8(entry.key | (++i < slots.length ? 128 : 0));
+        _writeDisplayStack(w, entry.value);
+      }
+    });
   }
 
   static String _entityUuid(int id) =>
@@ -619,12 +692,29 @@ class GameBridge {
     _entities[id] = e;
   }
 
+  void _dismount() {
+    _vehicleId = null;
+    _vehicleMove = null;
+    _paddles = null;
+  }
+
   /// Parent calls this every 50 ms. Never fabricate initial position (0,0,0).
   void tick() {
-    if (!_loggedIn || !_positioned) return;
+    if (!_loggedIn) return;
+    if (!_positioned || _teleports.isNotEmpty || !_freshMovement) {
+      upstream({'t': 'tick'});
+      return;
+    }
+    _freshMovement = false;
     upstream({
       't': 'tick',
-      'pos': [_x, _y, _z, _yaw, _pitch, _onGround, _horizontalCollision],
+      if (_vehicleId == null)
+        'pos': [_x, _y, _z, _yaw, _pitch, _onGround, _horizontalCollision],
+      if (_vehicleId != null) ...{
+        'look': [_yaw, _pitch],
+        'vmove': _vehicleMove,
+        'paddles': _paddles,
+      },
       'keys': {
         'f': _input & 1 != 0,
         'b': _input & 2 != 0,
@@ -670,6 +760,7 @@ class GameBridge {
         _pitch = pitch;
         _onGround = flags & 1 != 0;
         _horizontalCollision = flags & 2 != 0;
+        _freshMovement = true;
         _cacheCenter();
       case 'PLAYER_INPUT':
         _input = r.u8() & 127;
@@ -752,23 +843,31 @@ class GameBridge {
         r.varInt();
         if (action == 1) _input |= 64;
         if (action == 2) _input &= ~64;
+        if (action == 0) upstream({'t': 'wake'});
+        if (action == 6) upstream({'t': 'glide'});
       case 'PLAYER_ABILITIES':
-        upstream({'t': 'abilities', 'flying': r.u8() & 2 != 0});
+        r.u8();
+        _report('Flight toggling has no verified upstream message');
       case 'MOVE_VEHICLE':
-        upstream({
-          't': 'tick',
-          'look': [_yaw, _pitch],
-          'vmove': [r.f64(), r.f64(), r.f64(), r.f32(), r.f32(), r.boolValue()],
-        });
+        final move = [
+          r.f64(),
+          r.f64(),
+          r.f64(),
+          r.f32(),
+          r.f32(),
+          r.boolValue(),
+        ];
+        if (_positioned && _teleports.isEmpty) {
+          _vehicleMove = move;
+          _freshMovement = true;
+        }
       case 'PADDLE_BOAT':
-        upstream({
-          't': 'tick',
-          'paddles': [r.boolValue(), r.boolValue()],
-        });
+        _paddles = [r.boolValue(), r.boolValue()];
+      case 'CHAT_ACK':
+        r.varInt(); // Signatures terminate at this bridge.
       case 'CLIENT_TICK_END':
       case 'PLAYER_LOADED':
-      case 'CHAT_ACK':
-        break; // Parent schedules ticks; signatures terminate at this bridge.
+        break; // Parent schedules ticks.
       default:
         _report('Unsupported gameplay packet: $type');
     }
@@ -789,7 +888,7 @@ class GameBridge {
       case 5:
         upstream({'t': 'release'});
       case 6:
-        upstream({'t': 'swap'});
+        upstream({'t': 'swaphands'});
       case 7:
         _report('Unsupported player action: STAB');
       default:
@@ -861,13 +960,15 @@ class GameBridge {
 }
 
 class _Entity {
-  const _Entity(this.x, this.y, this.z, this.yaw, this.pitch);
+  const _Entity(this.x, this.y, this.z, this.yaw, this.pitch, this.type);
   factory _Entity.fromMessage(Map m, [_Entity? p]) => _Entity(
     GameBridge._num(m, 'x', p?.x ?? 0).toDouble(),
     GameBridge._num(m, 'y', p?.y ?? 0).toDouble(),
     GameBridge._num(m, 'z', p?.z ?? 0).toDouble(),
     GameBridge._num(m, 'yaw', p?.yaw ?? 0).toDouble(),
     GameBridge._num(m, 'pitch', p?.pitch ?? 0).toDouble(),
+    m['type'] != null ? GameBridge._resource(m['type']) : p?.type,
   );
   final double x, y, z, yaw, pitch;
+  final String? type;
 }

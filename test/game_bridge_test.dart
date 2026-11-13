@@ -23,7 +23,11 @@ class Harness {
         'minecraft:the_nether': 3,
       },
       'biomes': {'minecraft:plains': 5, 'minecraft:desert': 9},
-      'entities': {'minecraft:pig': 7, 'minecraft:player': 12},
+      'entities': {
+        'minecraft:pig': 7,
+        'minecraft:player': 12,
+        'minecraft:item': 15,
+      },
       'items': {'minecraft:stone': 1},
       'menus': {'minecraft:generic_9x3': 2},
       'clocks': {'minecraft:overworld': 4},
@@ -112,40 +116,48 @@ void main() {
     },
   );
 
-  test('ticks start only after upstream position; respawn resets the gate', () {
-    final h = Harness();
-    h.game.tick();
-    expect(h.messages, isEmpty);
-    h.login();
-    h.game.tick();
-    expect(h.messages.where((m) => m['t'] == 'tick'), isEmpty);
-    h.position();
-    h.game.tick();
-    expect(h.messages.last['pos'], [
-      -1.5,
-      70.0,
-      32.0,
-      270.0,
-      -30.0,
-      false,
-      false,
-    ]);
-    h.game.onMessage({
-      't': 'respawn',
-      'dim': 'nether',
-      'height': 256,
-      'minY': 0,
-      'mode': 'creative',
-    });
-    final r = h.packet('RESPAWN');
-    spawnInfo(r, dimension: 3, name: 'minecraft:the_nether');
-    expect(r.u8(), 3);
-    expect(r.remaining, 0);
-    expect(h.game.sectionCount, 16);
-    final count = h.messages.length;
-    h.game.tick();
-    expect(h.messages.length, count);
-  });
+  test(
+    'position ticks require upstream position, ack and fresh client movement',
+    () {
+      final h = Harness();
+      h.game.tick();
+      expect(h.messages, isEmpty);
+      h.login();
+      h.game.tick();
+      expect(h.messages.last, {'t': 'tick'});
+      h.position();
+      h.game.tick();
+      expect(h.messages.last, {'t': 'tick'});
+      h.receive('ACCEPT_TELEPORTATION', Writer()..varInt(5));
+      h.game.tick();
+      expect(h.messages.last, {'t': 'tick'});
+      h.receive('MOVE_PLAYER_STATUS_ONLY', Writer()..u8(0));
+      h.game.tick();
+      expect(h.messages.last['pos'], [
+        -1.5,
+        70.0,
+        32.0,
+        270.0,
+        -30.0,
+        false,
+        false,
+      ]);
+      h.game.onMessage({
+        't': 'respawn',
+        'dim': 'nether',
+        'height': 256,
+        'minY': 0,
+        'mode': 'creative',
+      });
+      final r = h.packet('RESPAWN');
+      spawnInfo(r, dimension: 3, name: 'minecraft:the_nether');
+      expect(r.u8(), 3);
+      expect(r.remaining, 0);
+      expect(h.game.sectionCount, 16);
+      h.game.tick();
+      expect(h.messages.last, {'t': 'tick'});
+    },
+  );
 
   test(
     'teleport layout, relative state, cache floor and matching acknowledgments',
@@ -182,6 +194,7 @@ void main() {
         5,
         9,
       ]);
+      h.receive('MOVE_PLAYER_STATUS_ONLY', Writer()..u8(0));
       h.game.tick();
       expect(h.messages.last['pos'], [
         0.5,
@@ -272,9 +285,13 @@ void main() {
         ..u8(1);
       h.receive('MOVE_PLAYER_POS', move());
       h.game.tick();
-      expect(h.messages.where((m) => m['t'] == 'tick'), isEmpty);
+      expect(h.messages.last, {'t': 'tick'});
       h.position();
       h.receive('MOVE_PLAYER_POS', move());
+      h.game.tick();
+      expect(h.messages.last, {'t': 'tick'});
+      h.receive('ACCEPT_TELEPORTATION', Writer()..varInt(5));
+      h.receive('MOVE_PLAYER_STATUS_ONLY', Writer()..u8(0));
       h.game.tick();
       expect((h.messages.last['pos'] as List).first, -1.5);
       expect(
@@ -643,5 +660,206 @@ void main() {
     h.receive('SET_CARRIED_ITEM', Writer()..i16(6));
     expect(h.messages.last, {'t': 'held', 'slot': 6});
     expect(h.logs, isEmpty);
+  });
+
+  test('swap, wake and glide use the messages found in the browser source', () {
+    final h = Harness();
+    h.receive(
+      'PLAYER_ACTION',
+      Writer()
+        ..varInt(6)
+        ..position(0, 0, 0)
+        ..u8(0)
+        ..varInt(0),
+    );
+    h.receive(
+      'PLAYER_COMMAND',
+      Writer()
+        ..varInt(42)
+        ..varInt(0)
+        ..varInt(0),
+    );
+    h.receive(
+      'PLAYER_COMMAND',
+      Writer()
+        ..varInt(42)
+        ..varInt(6)
+        ..varInt(0),
+    );
+    expect(h.messages, [
+      {'t': 'swaphands'},
+      {'t': 'wake'},
+      {'t': 'glide'},
+    ]);
+    h.receive('PLAYER_ABILITIES', Writer()..u8(2));
+    expect(h.messages.length, 3); // no invented flight message
+    expect(h.logs.single, contains('Flight toggling'));
+    h.receive('CHAT_ACK', Writer()..varInt(25));
+  });
+
+  test(
+    'vehicle updates wait for a positioned scheduled tick and dismount cleanly',
+    () {
+      final h = Harness()..login();
+      Writer vehicleMove() => Writer()
+        ..f64(1)
+        ..f64(65)
+        ..f64(3)
+        ..f32(90)
+        ..f32(0)
+        ..boolValue(true);
+      h.receive('MOVE_VEHICLE', vehicleMove());
+      h.receive(
+        'PADDLE_BOAT',
+        Writer()
+          ..boolValue(true)
+          ..boolValue(false),
+      );
+      h.game.tick();
+      expect(h.messages.last, {'t': 'tick'});
+      h.position();
+      h.game.onMessage({
+        't': 'pass',
+        'id': 100,
+        'list': [42],
+      });
+      h.receive('ACCEPT_TELEPORTATION', Writer()..varInt(5));
+      h.receive('MOVE_VEHICLE', vehicleMove());
+      h.game.tick();
+      expect(h.messages.last.containsKey('pos'), false);
+      expect(h.messages.last['look'], [270.0, -30.0]);
+      expect(h.messages.last['vmove'], [1.0, 65.0, 3.0, 90.0, 0.0, true]);
+      expect(h.messages.last['paddles'], [true, false]);
+      final r = h.packet('SET_PASSENGERS');
+      expect([r.varInt(), r.varInt(), r.varInt()], [100, 1, 42]);
+      expect(r.remaining, 0);
+      h.game.onMessage({'t': 'pass', 'id': 100, 'list': []});
+      h.receive('MOVE_PLAYER_STATUS_ONLY', Writer()..u8(0));
+      h.game.tick();
+      expect(h.messages.last.containsKey('pos'), true);
+      expect(h.messages.last.containsKey('vmove'), false);
+    },
+  );
+
+  test('initial player spawn installs a profile before ADD_ENTITY', () {
+    final h = Harness();
+    h.game.onMessage({
+      't': 'spawn',
+      'id': 14,
+      'type': 'player',
+      'uuid': '00112233-4455-6677-8899-aabbccddeeff',
+      'name': 'Alex',
+      'x': 0,
+      'y': 64,
+      'z': 0,
+    });
+    expect(h.packets.map((p) => p.$1), ['PLAYER_INFO_UPDATE', 'ADD_ENTITY']);
+  });
+
+  test('stale airborne positions are never replayed by the 50ms timer', () {
+    final h = Harness()
+      ..login()
+      ..position();
+    h.receive('ACCEPT_TELEPORTATION', Writer()..varInt(5));
+    h.receive(
+      'MOVE_PLAYER_POS_ROT',
+      Writer()
+        ..f64(1)
+        ..f64(120)
+        ..f64(3)
+        ..f32(45)
+        ..f32(-20)
+        ..u8(0),
+    );
+    h.game.tick();
+    expect(h.messages.last['pos'], [
+      1.0,
+      120.0,
+      3.0,
+      45.0,
+      -20.0,
+      false,
+      false,
+    ]);
+    for (var i = 0; i < 80; i++) {
+      h.game.tick();
+      expect(h.messages.last, {'t': 'tick'});
+    }
+    // A teleport also discards movement received before the correction.
+    h.receive(
+      'MOVE_PLAYER_POS',
+      Writer()
+        ..f64(2)
+        ..f64(119)
+        ..f64(4)
+        ..u8(0),
+    );
+    h.position(id: 8);
+    h.game.tick();
+    expect(h.messages.last, {'t': 'tick'});
+    h.receive('ACCEPT_TELEPORTATION', Writer()..varInt(8));
+    h.game.tick();
+    expect(h.messages.last, {'t': 'tick'});
+  });
+
+  test('flattened dropped-item metadata includes pose and real ItemStack', () {
+    final h = Harness();
+    h.game.onMessage({
+      't': 'spawn',
+      'id': 81,
+      'type': 'item',
+      'x': 0,
+      'y': 64,
+      'z': 0,
+    });
+    h.game.onMessage({
+      't': 'meta',
+      'id': 81,
+      'pose': 'crouching',
+      'item': {'n': 'stone', 'c': 4, 'x': 'opaque-proxy-signature'},
+      'm': {'shared_flags': 64},
+    });
+    var r = h.packet('SET_ENTITY_DATA');
+    expect(r.varInt(), 81);
+    expect([r.u8(), r.varInt(), r.u8()], [0, 0, 64]);
+    expect([r.u8(), r.varInt(), r.varInt()], [6, 20, 5]);
+    expect([r.u8(), r.varInt()], [8, 7]);
+    expect([r.varInt(), r.varInt(), r.varInt(), r.varInt()], [4, 1, 0, 0]);
+    expect(r.u8(), 255);
+    expect(r.remaining, 0);
+    h.game.onMessage({'t': 'meta', 'id': 81, 'item': null});
+    r = h.packet('SET_ENTITY_DATA');
+    expect(r.varInt(), 81);
+    expect([r.u8(), r.varInt(), r.varInt(), r.u8()], [8, 7, 0, 255]);
+    expect(r.remaining, 0);
+  });
+
+  test('flattened mainhand equipment and slot maps use continuation bytes', () {
+    final h = Harness();
+    h.game.onMessage({
+      't': 'equip',
+      'id': 91,
+      'item': {'n': 'stone', 'c': 2},
+    });
+    var r = h.packet('SET_EQUIPMENT');
+    expect(r.varInt(), 91);
+    expect(r.u8(), 0); // final slot, mainhand ordinal
+    expect([r.varInt(), r.varInt(), r.varInt(), r.varInt()], [2, 1, 0, 0]);
+    expect(r.remaining, 0);
+    h.game.onMessage({
+      't': 'equip',
+      'id': 91,
+      'slots': {
+        '1': null,
+        '5': {'n': 'minecraft:stone', 'c': 1},
+      },
+    });
+    r = h.packet('SET_EQUIPMENT');
+    expect(r.varInt(), 91);
+    expect(r.u8(), 129); // offhand, another update follows
+    expect(r.varInt(), 0);
+    expect(r.u8(), 5); // head, final update
+    expect([r.varInt(), r.varInt(), r.varInt(), r.varInt()], [1, 1, 0, 0]);
+    expect(r.remaining, 0);
   });
 }

@@ -19,8 +19,9 @@ class Peer {
   }
   void send(int id, Writer w) => socket.add(framePacket(id, w.take()));
   Future<Reader> next() async {
-    if (!await packets.moveNext().timeout(const Duration(seconds: 8)))
+    if (!await packets.moveNext().timeout(const Duration(seconds: 8))) {
       throw StateError('Peer closed');
+    }
     return Reader(packets.current);
   }
 
