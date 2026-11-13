@@ -207,6 +207,8 @@ void main() {
           chunk.add([1, 0, 0, 0, 0]);
         }
         chunk.add(List.filled(256, 0));
+        // Official clients ignore opaque data beyond the known chunk prefix.
+        chunk.add([0xde, 0xad, 0xbe, 0xef]);
         ws.add(chunk.takeBytes());
         var gotChunk = false;
         for (var i = 0; i < 15; i++) {
@@ -227,6 +229,24 @@ void main() {
           }
         }
         expect(gotChunk, isTrue);
+        expect(logs, contains(contains('4 字节尾部附加数据')));
+        final lightUpdate = BytesBuilder()..add([2, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+        lightUpdate.add([1, 0, 0, 0, 1]); // One palette entry + sky light.
+        lightUpdate.add(List.filled(2048, 0xff));
+        lightUpdate.add([0x12, 0x34]);
+        ws.add(lightUpdate.takeBytes());
+        var gotLight = false;
+        for (var i = 0; i < 15; i++) {
+          final packet = await peer.next();
+          if (packet.varInt() == clientbound['LIGHT_UPDATE']) {
+            expect(packet.varInt(), 0);
+            expect(packet.varInt(), 0);
+            gotLight = true;
+            break;
+          }
+        }
+        expect(gotLight, isTrue);
+        expect(logs, contains(contains('2 字节尾部附加数据')));
         ws.add(jsonEncode({'t': 'block', 'x': 0, 'y': 70, 'z': 0, 's': 0}));
         var gotBlock = false;
         for (var i = 0; i < 15; i++) {

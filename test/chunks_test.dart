@@ -4,6 +4,42 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:opus_mc_agent/protocol/chunks.dart';
 
 void main() {
+  test('opaque tails match official parsing and never enter Java packets', () {
+    for (final type in [1, 2]) {
+      final prefix = _fixture(
+        type: type,
+        sections: [
+          _Section([1], sky: List.filled(2048, 0xff)),
+        ],
+      );
+      final plain = BridgeChunk.decode(prefix);
+      expect(plain.trailingByteCount, 0);
+      for (final tail in <List<int>>[
+        [0],
+        [255, 0, 37, 1],
+        List.generate(256, (i) => i),
+      ]) {
+        final extended = BridgeChunk.decode([...prefix, ...tail]);
+        expect(extended.trailingByteCount, tail.length);
+        expect(extended.sections.single.palette, plain.sections.single.palette);
+        expect(
+          extended.sections.single.skyLight,
+          plain.sections.single.skyLight,
+        );
+        expect(extended.biomes, plain.biomes);
+        expect(
+          extended.lightPacket(sectionCount: 1),
+          plain.lightPacket(sectionCount: 1),
+        );
+        if (type == 1) {
+          expect(
+            extended.chunkPacket(sectionCount: 1, biomeIds: [0]),
+            plain.chunkPacket(sectionCount: 1, biomeIds: [0]),
+          );
+        }
+      }
+    }
+  });
   test('chunk remaps palette before air/fluid counts and heightmaps', () {
     final chunk = BridgeChunk.decode(
       _fixture(
@@ -278,46 +314,43 @@ void main() {
     expect(chunk.sections.single.skyLight, everyElement(12));
   });
 
-  test(
-    'rejects malformed types, palette lengths, flags, indices and tails',
-    () {
-      final valid = _fixture(
-        type: 2,
-        sections: [
-          _Section([0]),
-        ],
-      );
-      for (final mutate in <void Function(Uint8List)>[
-        (b) => b[0] = 3,
-        (b) {
-          b[10] = 0;
-          b[11] = 0;
-        },
-        (b) {
-          b[10] = 1;
-          b[11] = 16;
-        },
-        (b) => b[14] = 4,
-      ]) {
-        final bad = Uint8List.fromList(valid);
-        mutate(bad);
-        expect(() => BridgeChunk.decode(bad), throwsFormatException);
-      }
-      final badIndex = _fixture(
-        type: 2,
-        sections: [
-          _Section([0, 1], indices: List.filled(4096, 2)),
-        ],
-      );
-      expect(() => BridgeChunk.decode(badIndex), throwsFormatException);
-      expect(() => BridgeChunk.decode([...valid, 0]), throwsFormatException);
-      expect(() => BridgeChunk.decode([256]), throwsFormatException);
-      expect(
-        () => BridgeChunk.decode(List.filled(BridgeChunk.maxInputBytes + 1, 0)),
-        throwsFormatException,
-      );
-    },
-  );
+  test('rejects malformed core fields even with a trailing extension', () {
+    final valid = _fixture(
+      type: 2,
+      sections: [
+        _Section([0]),
+      ],
+    );
+    for (final mutate in <void Function(Uint8List)>[
+      (b) => b[0] = 3,
+      (b) {
+        b[10] = 0;
+        b[11] = 0;
+      },
+      (b) {
+        b[10] = 1;
+        b[11] = 16;
+      },
+      (b) => b[14] = 4,
+    ]) {
+      final bad = Uint8List.fromList(valid);
+      mutate(bad);
+      expect(() => BridgeChunk.decode(bad), throwsFormatException);
+      expect(() => BridgeChunk.decode([...bad, 0, 255]), throwsFormatException);
+    }
+    final badIndex = _fixture(
+      type: 2,
+      sections: [
+        _Section([0, 1], indices: List.filled(4096, 2)),
+      ],
+    );
+    expect(() => BridgeChunk.decode(badIndex), throwsFormatException);
+    expect(() => BridgeChunk.decode([256]), throwsFormatException);
+    expect(
+      () => BridgeChunk.decode(List.filled(BridgeChunk.maxInputBytes + 1, 0)),
+      throwsFormatException,
+    );
+  });
 
   test(
     'every truncated prefix fails, including light and biome boundaries',

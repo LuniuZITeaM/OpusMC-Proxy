@@ -25,7 +25,17 @@ class BridgeChunk {
   final List<BridgeSection> sections;
   final List<int>? biomes;
 
-  BridgeChunk._(this.type, this.cx, this.cz, this.sections, this.biomes);
+  /// Opaque bytes after the known layout; the official client ignores them.
+  final int trailingByteCount;
+
+  BridgeChunk._(
+    this.type,
+    this.cx,
+    this.cz,
+    this.sections,
+    this.biomes,
+    this.trailingByteCount,
+  );
 
   static BridgeChunk decode(List<int> bytes) {
     if (bytes.length > maxInputBytes) {
@@ -73,10 +83,17 @@ class BridgeChunk {
       );
     }
     final biomes = type == 1 ? List<int>.unmodifiable(r.raw(256)) : null;
-    if (r.remaining != 0) {
-      throw const FormatException('Trailing bridge chunk bytes');
-    }
-    return BridgeChunk._(type, cx, cz, List.unmodifiable(sections), biomes);
+    // net.js onBinary stops here for type 1, and after the sections for type 2.
+    // It does not require EOF. Keep the validated prefix and ignore the opaque
+    // tail rather than guessing a format or forwarding it into Java packets.
+    return BridgeChunk._(
+      type,
+      cx,
+      cz,
+      List.unmodifiable(sections),
+      biomes,
+      r.remaining,
+    );
   }
 
   void _checkSectionCount(int count) {

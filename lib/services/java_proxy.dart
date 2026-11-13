@@ -100,6 +100,7 @@ class _Session {
   int pendingBytes = 0;
   BlockStateRegistry? blockStates;
   bool upstreamLoggedIn = false;
+  final Set<int> reportedChunkTails = {};
   int? keepAlive;
   DateTime keepSent = DateTime.now();
   _Session(this.owner, this.socket);
@@ -389,6 +390,11 @@ class _Session {
       } else if (data is List<int>) {
         if (blockStates == null) throw const FormatException('上游尚未提供方块注册表');
         final chunk = BridgeChunk.decode(data);
+        if (chunk.trailingByteCount > 0 && reportedChunkTails.add(chunk.type)) {
+          owner.log(
+            '区块包类型 ${chunk.type} 有 ${chunk.trailingByteCount} 字节尾部附加数据，已按网页端行为忽略（后续同类型不重复提示）',
+          );
+        }
         if (chunk.type == 1) {
           emit('CHUNK_BATCH_START', Writer());
           emit(
