@@ -12,6 +12,7 @@ import '../protocol/chunks.dart';
 import '../protocol/game_bridge.dart';
 import '../protocol/state_registry.dart';
 import 'opus_api.dart';
+import 'room_admission.dart';
 
 class JavaProxy {
   final OpusApi api;
@@ -91,12 +92,14 @@ class _Session {
   StreamSubscription<dynamic>? wsSub;
   Timer? timer;
   Timer? deadline;
+  RoomAdmission? admission;
   bool closed = false;
   Future<void> pending = Future.value();
   String name = '';
   late GameBridge game;
   int pendingBytes = 0;
   bool statesVerified = false;
+  bool upstreamLoggedIn = false;
   int? keepAlive;
   DateTime keepSent = DateTime.now();
   _Session(this.owner, this.socket);
@@ -255,10 +258,7 @@ class _Session {
         if (id != configServerbound['FINISH_CONFIGURATION']) return;
         phase = _Phase.play;
         deadline?.cancel();
-        deadline = Timer(
-          const Duration(seconds: 90),
-          () => unawaited(close('房间连接超时')),
-        );
+        admission = RoomAdmission(onTimeout: () => unawaited(close('房间连接超时')));
         game = GameBridge(
           emit: emit,
           upstream: up,
@@ -291,7 +291,8 @@ class _Session {
         );
         up({
           't': 'hello',
-          'name': name,
+          // The browser uses Account.name for hosted rooms, including Unicode.
+          'name': owner.api.playerName(name),
           'version': 1,
           'proto': 1,
           'room': owner._room,
@@ -351,12 +352,25 @@ class _Session {
           );
           return;
         }
-        if (m['t'] == 'notice' || m['t'] == 'queue' || m['t'] == 'room') {
+        admission?.onMessage(m['t'] as String?);
+        if (m['t'] == 'queue') {
+          owner.log(
+            '房间排队：第 ${m['pos'] ?? '?'} 位 / 共 ${m['of'] ?? '?'} 个房间，等待上游启动（可断开 Java 连接取消）',
+          );
+        } else if (m['t'] == 'notice' || m['t'] == 'room') {
           owner.log('${m['t']}: ${m['text'] ?? m['name'] ?? m['pos'] ?? ''}');
         }
         if (m['t'] == 'login') {
           deadline?.cancel();
+          upstreamLoggedIn = true;
           owner.log('$name 已进入房间');
+        }
+        // Loading-screen messages are not gameplay packets. In particular,
+        // don't send Java system chat before its first play LOGIN packet.
+        if (m['t'] == 'queue' ||
+            m['t'] == 'room' ||
+            (m['t'] == 'notice' && !upstreamLoggedIn)) {
+          return;
         }
         game.onMessage(m);
       } else if (data is List<int>) {
@@ -402,6 +416,7 @@ class _Session {
     closed = true;
     timer?.cancel();
     deadline?.cancel();
+    admission?.close();
     owner._sessions.remove(this);
     await wsSub?.cancel();
     try {

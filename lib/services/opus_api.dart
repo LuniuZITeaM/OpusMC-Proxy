@@ -27,6 +27,11 @@ class OpusApi {
   ).join();
   bool _disposed = false;
 
+  String playerName(String fallback) {
+    final name = account?['name'];
+    return name is String && name.isNotEmpty ? name : fallback;
+  }
+
   String get roomKey {
     final key = account?['roomKey'];
     return key is String && key.isNotEmpty ? key : _guestKey;

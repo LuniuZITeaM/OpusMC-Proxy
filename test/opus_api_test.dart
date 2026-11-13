@@ -5,6 +5,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:opus_mc_agent/services/opus_api.dart';
 
 void main() {
+  test('hosted room name follows account name with guest fallback', () {
+    final api = OpusApi('http://127.0.0.1:9');
+    try {
+      expect(api.playerName('JavaPlayer'), 'JavaPlayer');
+      api.account = {'name': '网页玩家'};
+      expect(api.playerName('JavaPlayer'), '网页玩家');
+      api.account = {'name': ''};
+      expect(api.playerName('JavaPlayer'), 'JavaPlayer');
+    } finally {
+      api.dispose();
+    }
+  });
   test(
     'identity login, public/own rooms and logout match account.js contracts',
     () async {

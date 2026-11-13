@@ -94,8 +94,10 @@ void main() {
         });
       });
       final api = OpusApi('http://127.0.0.1:${server.port}/fixture')
-        ..token = 'fixture-token';
-      final proxy = JavaProxy(api: api, log: (_) {});
+        ..token = 'fixture-token'
+        ..account = {'name': '测试账号', 'roomKey': 'fixture-room-key'};
+      final logs = <String>[];
+      final proxy = JavaProxy(api: api, log: logs.add);
       await proxy.start(
         host: '127.0.0.1',
         port: 0,
@@ -143,7 +145,11 @@ void main() {
         expect(h['token'], 'fixture-token');
         expect(h['room'], 'TEST');
         expect(h['rd'], 4);
+        expect(h['name'], '测试账号');
+        expect(h['key'], 'fixture-room-key');
         final ws = await websocket.future;
+        ws.add(jsonEncode({'t': 'queue', 'pos': 3, 'of': 11}));
+        ws.add(jsonEncode({'t': 'notice', 'text': '正在启动房间'}));
         final registry = jsonDecode(
           await rootBundle.loadString('assets/registries.json'),
         ) as Map;
@@ -185,6 +191,14 @@ void main() {
           }
         }
         expect(found, isTrue);
+        expect(logs, contains(contains('第 3 位 / 共 11 个房间')));
+        expect(logs, contains('notice: 正在启动房间'));
+        expect(
+          logs.any(
+            (line) => line.contains('Unsupported gameplay message: queue'),
+          ),
+          isFalse,
+        );
         // An actual binary bridge chunk crosses the WebSocket-to-Java boundary.
         final chunk = BytesBuilder()..add([1, 0, 0, 0, 0, 0, 0, 0, 0, 24]);
         for (var i = 0; i < 24; i++) {
