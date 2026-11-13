@@ -18,7 +18,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'OpusMCAgent',
+    title: 'OpusMC-Proxy',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       useMaterial3: true,
@@ -436,7 +436,7 @@ class _AgentHomeState extends State<AgentHome> with WidgetsBindingObserver {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'OpusMCAgent',
+                  'OpusMC-Proxy',
                   style: TextStyle(
                     fontSize: 25,
                     fontWeight: FontWeight.w800,

@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opus_mc_agent/protocol/wire.dart';
+import 'package:opus_mc_proxy/protocol/wire.dart';
 
 void main() {
   test('signed VarInts and position extremes round trip', () {

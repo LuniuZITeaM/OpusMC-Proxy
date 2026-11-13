@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opus_mc_agent/main.dart';
+import 'package:opus_mc_proxy/main.dart';
 
 Finder field(String label) => find.byWidgetPredicate(
   (widget) => widget is TextField && widget.decoration?.labelText == label,
@@ -14,12 +14,12 @@ void main() {
       await tester.binding.setSurfaceSize(Size(width, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(const MyApp());
-      expect(find.text('OpusMCAgent'), findsOneWidget);
+      expect(find.text('OpusMC-Proxy'), findsOneWidget);
       expect(find.text('等待登录'), findsOneWidget);
       expect(find.text('登录账户'), findsOneWidget);
       expect(
         tester.widget<MaterialApp>(find.byType(MaterialApp)).title,
-        'OpusMCAgent',
+        'OpusMC-Proxy',
       );
       expect(
         tester.widget<TextField>(field('监听主机')).controller!.text,

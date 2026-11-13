@@ -4,10 +4,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opus_mc_agent/protocol/ids.dart';
-import 'package:opus_mc_agent/protocol/wire.dart';
-import 'package:opus_mc_agent/services/java_proxy.dart';
-import 'package:opus_mc_agent/services/opus_api.dart';
+import 'package:opus_mc_proxy/protocol/ids.dart';
+import 'package:opus_mc_proxy/protocol/wire.dart';
+import 'package:opus_mc_proxy/services/java_proxy.dart';
+import 'package:opus_mc_proxy/services/opus_api.dart';
 
 class Peer {
   final Socket socket;

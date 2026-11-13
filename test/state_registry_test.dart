@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opus_mc_agent/protocol/state_registry.dart';
+import 'package:opus_mc_proxy/protocol/state_registry.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

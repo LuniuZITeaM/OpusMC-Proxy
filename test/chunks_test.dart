@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opus_mc_agent/protocol/chunks.dart';
+import 'package:opus_mc_proxy/protocol/chunks.dart';
 
 void main() {
   test('opaque tails match official parsing and never enter Java packets', () {

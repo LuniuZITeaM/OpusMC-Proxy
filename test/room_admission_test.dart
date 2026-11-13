@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opus_mc_agent/services/room_admission.dart';
+import 'package:opus_mc_proxy/services/room_admission.dart';
 
 void main() {
   testWidgets('queue outlives startup timeout, notice resumes deadline', (

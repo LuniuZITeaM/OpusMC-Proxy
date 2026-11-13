@@ -186,7 +186,7 @@ class _Session {
                 'players': {'max': 1, 'online': playing},
                 'description': {
                   'text':
-                      'OpusMCAgent · 房间 ${owner._room}\nMinecraft Java 26.2',
+                      'OpusMC-Proxy · 房间 ${owner._room}\nMinecraft Java 26.2',
                 },
                 'enforcesSecureChat': false,
               }),

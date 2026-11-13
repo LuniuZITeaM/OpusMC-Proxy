@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opus_mc_agent/protocol/inventory_bridge.dart';
-import 'package:opus_mc_agent/protocol/wire.dart';
+import 'package:opus_mc_proxy/protocol/inventory_bridge.dart';
+import 'package:opus_mc_proxy/protocol/wire.dart';
 
 class _Harness {
   final packets = <(String, Uint8List)>[];

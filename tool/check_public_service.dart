@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:opus_mc_agent/services/opus_api.dart';
+import 'package:opus_mc_proxy/services/opus_api.dart';
 
 /// Explicit opt-in online smoke check; never logs in or joins a room.
 Future<void> main(List<String> args) async {

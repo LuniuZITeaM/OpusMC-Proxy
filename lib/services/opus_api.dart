@@ -56,7 +56,7 @@ class OpusApi {
       '/api/account/code',
       body: {
         'code': code.trim(),
-        'device': '${Platform.operatingSystem} · OpusMC Agent',
+        'device': '${Platform.operatingSystem} · OpusMC-Proxy',
       },
     );
     if (result is! Map ||

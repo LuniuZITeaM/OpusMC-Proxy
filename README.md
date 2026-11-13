@@ -1,4 +1,4 @@
-# OpusMCAgent
+# OpusMC-Proxy
 
 Windows Flutter 桌面程序：使用 OpusMC 个人识别码登录，选择正式多人房间，将房间的 WebSocket 语义协议转换为 Minecraft Java **26.2 / 协议 776** 的本地 TCP 入口。注册表快照随程序打包，运行时不需要 Java。不集成 ViaVersion。
 
@@ -34,6 +34,8 @@ flutter build windows --release
 ```
 
 发行时复制整个 `build/windows/x64/runner/Release` 目录，不能只复制 exe。运行程序本身不需要 Flutter SDK 或 Java。
+
+Windows 启动文件为 `build/windows/x64/runner/Release/OpusMC-Proxy.exe`，发行包命名为 `OpusMC-Proxy-windows-x64.zip`。Dart 包名为 `opus_mc_proxy`。
 
 ## 实现
 

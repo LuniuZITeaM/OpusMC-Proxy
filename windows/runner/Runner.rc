@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "opus_mc_agent" "\0"
+            VALUE "FileDescription", "OpusMC-Proxy" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "opus_mc_agent" "\0"
+            VALUE "InternalName", "OpusMC-Proxy" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "opus_mc_agent.exe" "\0"
-            VALUE "ProductName", "opus_mc_agent" "\0"
+            VALUE "OriginalFilename", "OpusMC-Proxy.exe" "\0"
+            VALUE "ProductName", "OpusMC-Proxy" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

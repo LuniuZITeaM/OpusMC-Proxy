@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opus_mc_agent/protocol/game_bridge.dart';
-import 'package:opus_mc_agent/protocol/ids.dart';
-import 'package:opus_mc_agent/protocol/wire.dart';
+import 'package:opus_mc_proxy/protocol/game_bridge.dart';
+import 'package:opus_mc_proxy/protocol/ids.dart';
+import 'package:opus_mc_proxy/protocol/wire.dart';
 
 class Harness {
   Harness({this.mapBlockState});

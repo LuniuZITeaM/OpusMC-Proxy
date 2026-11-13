@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:opus_mc_agent/services/opus_api.dart';
+import 'package:opus_mc_proxy/services/opus_api.dart';
 
 void main() {
   test('hosted room name follows account name with guest fallback', () {
