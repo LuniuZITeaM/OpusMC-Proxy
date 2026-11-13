@@ -95,6 +95,7 @@ class BridgeChunk {
   Uint8List chunkPacket({
     required int sectionCount,
     required List<int> biomeIds,
+    int Function(int)? mapBlockState,
   }) {
     if (type != 1) throw StateError('A light update has no chunk data');
     _checkSectionCount(sectionCount);
@@ -117,8 +118,15 @@ class BridgeChunk {
     final data = _ChunkWriter();
     final heights = List<int>.filled(256, 0);
     for (var s = 0; s < sectionCount; s++) {
+      final section = s < sections.length ? sections[s] : null;
+      final mappedPalette = section?.palette
+          .map((id) => mapBlockState?.call(id) ?? id)
+          .toList();
       final states = s < sections.length
-          ? List<int>.generate(4096, sections[s].stateAt)
+          ? List<int>.generate(
+              4096,
+              (i) => mappedPalette![section!.indices?[i] ?? 0],
+            )
           : List<int>.filled(4096, 0);
       var nonAir = 0, fluids = 0;
       for (var i = 0; i < states.length; i++) {

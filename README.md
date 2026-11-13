@@ -18,6 +18,8 @@ HTTP 和 WebSocket 请求均携带原游戏 iframe 的 Origin/Referer，上游�
 
 托管房间入房使用 OpusMC 账号名，Java 玩家名仅用于本地连接身份。`queue` 表示等待上游启动房间，日志显示 `pos` 队列位置和 `of` 等待房间总数；排队期间不受 90 秒启动超时限制，断开 Java 连接即可取消。上游发送 `notice` 离开排队后恢复启动超时，收到 `login` 后停止启动计时。本地 WebRTC 联机与已启动的公开房间不等同于启动一个停止的托管房间。
 
+上游方块状态表通过名称和完整属性映射到 26.2，允许表长及编号顺序不同。区块、单个/批量方块更新、落沙实体和方块破坏/刷扫效果统一转换状态编号。26.2 中不存在的状态用石头显示并在日志列出数量及最多 8 个样例；编号越界、缺少 air 或无效表仍会断开。此映射解决方块表差异，不代表其他协议差异均已兼容。
+
 一个代理实例允许一个 Java 玩家同时使用登录的 OpusMC 账号；服务器列表 ping 不占此名额。其他玩家分别运行自己的实例并登录自己的账号，然后加入同一个房间。默认仅本机监听；修改监听地址后，该入口使用的是本程序已登录的 OpusMC 身份。
 
 ## 开发和构建
@@ -39,6 +41,7 @@ flutter build windows --release
 - `lib/protocol/game_bridge.dart`：玩家、方块、实体等游戏语义转换。
 - `lib/protocol/inventory_bridge.dart`：背包/容器语义转换。
 - `lib/protocol/chunks.dart`：二进制区块和光照转换。
+- `lib/protocol/state_registry.dart`：上游到 26.2 的方块状态名称映射。
 - `lib/protocol/ids.dart`：由本地 26.2 源码生成的包编号。
 - `assets/registries.json`：原版 26.2 配置包及物品/实体等 ID 快照。
 - `tool/generate_protocol.py`：重新生成协议数据的开发工具。参数见 `python tool/generate_protocol.py --help`；日常使用无需运行。

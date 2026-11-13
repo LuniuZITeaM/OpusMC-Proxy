@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/services.dart';
 import 'package:opus_mc_agent/protocol/ids.dart';
 import 'package:opus_mc_agent/protocol/wire.dart';
 import 'package:opus_mc_agent/services/java_proxy.dart';
@@ -150,10 +149,13 @@ void main() {
         final ws = await websocket.future;
         ws.add(jsonEncode({'t': 'queue', 'pos': 3, 'of': 11}));
         ws.add(jsonEncode({'t': 'notice', 'text': '正在启动房间'}));
-        final registry = jsonDecode(
-          await rootBundle.loadString('assets/registries.json'),
-        ) as Map;
-        ws.add(jsonEncode({'t': 'states', 'list': registry['states']}));
+        // Different length AND ID order must not prevent entering the room.
+        ws.add(
+          jsonEncode({
+            't': 'states',
+            'list': ['stone', 'air'],
+          }),
+        );
         ws.add(
           jsonEncode({
             't': 'biomes',
@@ -212,11 +214,31 @@ void main() {
           if (packet.varInt() == clientbound['LEVEL_CHUNK_WITH_LIGHT']) {
             expect(packet.i32(), 0);
             expect(packet.i32(), 0);
+            expect(packet.varInt(), 1); // Heightmaps.
+            expect(packet.varInt(), 1); // WORLD_SURFACE.
+            packet.raw(packet.varInt() * 8);
+            final sections = Reader(packet.raw(packet.varInt()));
+            expect(sections.i16(), 4096); // ID 0 is upstream stone, not air.
+            expect(sections.i16(), 0);
+            expect(sections.u8(), 0); // Single-valued block palette.
+            expect(sections.varInt(), 1); // Java stone.
             gotChunk = true;
             break;
           }
         }
         expect(gotChunk, isTrue);
+        ws.add(jsonEncode({'t': 'block', 'x': 0, 'y': 70, 'z': 0, 's': 0}));
+        var gotBlock = false;
+        for (var i = 0; i < 15; i++) {
+          final packet = await peer.next();
+          if (packet.varInt() == clientbound['BLOCK_UPDATE']) {
+            packet.position();
+            expect(packet.varInt(), 1);
+            gotBlock = true;
+            break;
+          }
+        }
+        expect(gotBlock, isTrue);
         final chat = received.stream.firstWhere((m) => m['t'] == 'chat');
         peer.send(
           serverbound['CHAT_COMMAND']!,

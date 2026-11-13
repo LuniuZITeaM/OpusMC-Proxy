@@ -4,6 +4,35 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:opus_mc_agent/protocol/chunks.dart';
 
 void main() {
+  test('chunk remaps palette before air/fluid counts and heightmaps', () {
+    final chunk = BridgeChunk.decode(
+      _fixture(
+        sections: [
+          _Section([7, 0, 4], indices: List.generate(4096, (i) => i % 3)),
+        ],
+      ),
+    );
+    final mapped = {7: 0, 0: 86, 4: 1}; // Upstream air is not ID zero.
+    final packet = _Packet(
+      chunk.chunkPacket(
+        sectionCount: 1,
+        biomeIds: [0],
+        mapBlockState: (id) => mapped[id]!,
+      ),
+    );
+    packet.bytes(8);
+    final heights = _heights(packet, 1);
+    expect(heights[0], 15); // Its topmost upstream state 7 maps to air.
+    final data = _Packet(packet.bytes(packet.varInt()));
+    expect(data.i16(), 2730);
+    expect(data.i16(), 1365);
+    expect(
+      _palette(data, 4096),
+      List.generate(4096, (i) => mapped[[7, 0, 4][i % 3]]),
+    );
+    // Source palette remains unchanged, so repeated encodes cannot double-map.
+    expect(chunk.sections.single.palette, [7, 0, 4]);
+  });
   test(
     'decodes little endian signed coordinates, palettes and partial light',
     () {

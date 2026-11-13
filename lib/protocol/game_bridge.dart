@@ -14,6 +14,7 @@ class GameBridge {
     required this.registries,
     required this.renderDistance,
     required this.log,
+    this.mapBlockState,
   }) : _inventory = InventoryBridge(
          emit: emit,
          upstream: upstream,
@@ -26,6 +27,9 @@ class GameBridge {
   final Map<String, dynamic> registries;
   final int renderDistance;
   final void Function(String) log;
+  final int Function(int)? mapBlockState;
+
+  int _state(int id) => mapBlockState?.call(id) ?? id;
   final InventoryBridge _inventory;
 
   int _sectionCount = 24;
@@ -165,7 +169,11 @@ class GameBridge {
           (w) => w
             ..i32(_int(m, 'e'))
             ..position(_int(m, 'x'), _int(m, 'y'), _int(m, 'z'))
-            ..i32(_int(m, 'd'))
+            ..i32(
+              const [2001, 3008].contains(_int(m, 'e'))
+                  ? _state(_int(m, 'd'))
+                  : _int(m, 'd'),
+            )
             ..boolValue(m['global'] == true),
         );
       case 'move':
@@ -431,7 +439,7 @@ class GameBridge {
     'BLOCK_UPDATE',
     (w) => w
       ..position(_int(m, 'x'), _int(m, 'y'), _int(m, 'z'))
-      ..varInt(_int(m, 's')),
+      ..varInt(_state(_int(m, 's'))),
   );
 
   void _blocks(Map m) {
@@ -507,7 +515,11 @@ class GameBridge {
         ..u8(_angle(entity.pitch))
         ..u8(_angle(entity.yaw))
         ..u8(_angle(_num(m, 'head', entity.yaw)))
-        ..varInt(_int(m, 'data'));
+        ..varInt(
+          type == _id('entities', 'falling_block')
+              ? _state(_int(m, 'data'))
+              : _int(m, 'data'),
+        );
     });
     _entities[id] = entity;
   }

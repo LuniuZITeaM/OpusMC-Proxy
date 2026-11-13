@@ -6,6 +6,8 @@ import 'package:opus_mc_agent/protocol/ids.dart';
 import 'package:opus_mc_agent/protocol/wire.dart';
 
 class Harness {
+  Harness({this.mapBlockState});
+  final int Function(int)? mapBlockState;
   final packets = <(String, List<int>)>[];
   final messages = <Map<String, dynamic>>[];
   final logs = <String>[];
@@ -27,6 +29,7 @@ class Harness {
         'minecraft:pig': 7,
         'minecraft:player': 12,
         'minecraft:item': 15,
+        'minecraft:falling_block': 16,
       },
       'items': {'minecraft:stone': 1},
       'menus': {'minecraft:generic_9x3': 2},
@@ -34,6 +37,7 @@ class Harness {
     },
     renderDistance: 8,
     log: logs.add,
+    mapBlockState: mapBlockState,
   );
 
   Reader packet(String type) =>
@@ -88,6 +92,42 @@ void spawnInfo(
 }
 
 void main() {
+  test(
+    'state mapping covers updates, block effects and falling entity data',
+    () {
+      final h = Harness(mapBlockState: (id) => id == 7 ? 1 : 0);
+      h.game.onMessage({'t': 'block', 'x': 2, 'y': 70, 'z': 3, 's': 7});
+      var r = h.packet('BLOCK_UPDATE');
+      expect(r.position(), {'x': 2, 'y': 70, 'z': 3});
+      expect(r.varInt(), 1);
+      h.game.onMessage({
+        't': 'blocks',
+        'list': [2, 70, 3, 4],
+      });
+      r = h.packet('BLOCK_UPDATE');
+      r.position();
+      expect(r.varInt(), 0);
+      for (final event in [2001, 3008, 1000]) {
+        h.game.onMessage({'t': 'wev', 'e': event, 'd': 7});
+        r = h.packet('LEVEL_EVENT');
+        expect(r.i32(), event);
+        r.position();
+        expect(r.i32(), event == 1000 ? 7 : 1);
+      }
+      for (final type in ['falling_block', 'minecraft:falling_block', 'pig']) {
+        h.game.onMessage({'t': 'spawn', 'id': 80, 'type': type, 'data': 7});
+        r = h.packet('ADD_ENTITY');
+        r.varInt();
+        r.raw(16);
+        r.varInt();
+        r.raw(24);
+        expect(r.u8(), 0); // Zero velocity.
+        r.raw(3);
+        expect(r.varInt(), type == 'pig' ? 7 : 1);
+        expect(r.remaining, 0);
+      }
+    },
+  );
   test(
     'login contains the complete 26.2 common spawn and trailing booleans',
     () {

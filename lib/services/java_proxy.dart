@@ -98,7 +98,7 @@ class _Session {
   String name = '';
   late GameBridge game;
   int pendingBytes = 0;
-  bool statesVerified = false;
+  BlockStateRegistry? blockStates;
   bool upstreamLoggedIn = false;
   int? keepAlive;
   DateTime keepSent = DateTime.now();
@@ -265,6 +265,11 @@ class _Session {
           registries: owner._registries,
           renderDistance: owner._rd,
           log: owner.log,
+          mapBlockState: (id) {
+            final registry = blockStates;
+            if (registry == null) throw const FormatException('上游尚未提供方块注册表');
+            return registry.translate(id);
+          },
         );
         final base = owner.api.base;
         final uri = base.replace(
@@ -338,11 +343,19 @@ class _Session {
       if (data is String) {
         final m = jsonDecode(data) as Map<String, dynamic>;
         if (m['t'] == 'states') {
-          verifyStateRegistry(
+          final registry = BlockStateRegistry.map(
             m['list'] as List,
             owner._registries['states'] as List,
           );
-          statesVerified = true;
+          blockStates = registry;
+          owner.log(
+            '方块状态映射：上游 ${registry.ids.length} 项 → Java 26.2 ${(owner._registries['states'] as List).length} 项（${registry.identity ? '编号一致' : '按名称和属性转换'}）',
+          );
+          if (registry.unsupported.isNotEmpty) {
+            owner.log(
+              '26.2 不支持 ${registry.unsupported.length} 个上游状态，暂用石头显示：${registry.unsupported.take(8).join('、')}',
+            );
+          }
         }
         if (m['t'] == 'error' || m['t'] == 'kick') {
           unawaited(
@@ -374,7 +387,7 @@ class _Session {
         }
         game.onMessage(m);
       } else if (data is List<int>) {
-        if (!statesVerified) throw const FormatException('上游尚未提供方块注册表');
+        if (blockStates == null) throw const FormatException('上游尚未提供方块注册表');
         final chunk = BridgeChunk.decode(data);
         if (chunk.type == 1) {
           emit('CHUNK_BATCH_START', Writer());
@@ -384,6 +397,7 @@ class _Session {
               chunk.chunkPacket(
                 sectionCount: game.sectionCount,
                 biomeIds: game.biomeIds,
+                mapBlockState: blockStates!.translate,
               ),
             ),
           );
